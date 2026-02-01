@@ -14,12 +14,25 @@ export type Customer = {
   note: string;
 };
 
+export type ProductVariant = {
+  id: string;
+  name: string;
+  sku: string;
+  priceDelta: number;
+  stock: number;
+  options: {
+    size?: string;
+    color?: string;
+  };
+};
+
 export type Product = {
   id: string;
   name: string;
   sku: string;
   price: number;
   stock: number;
+  variants?: ProductVariant[];
 };
 
 export type Order = {
@@ -39,8 +52,8 @@ type DemoDataApi = {
   createOrder: (input: { orderNumber: string; customerId: string; status: OrderStatus }) => void;
   updateOrder: (id: string, input: { orderNumber: string; customerId: string; status: OrderStatus }) => void;
   deleteOrder: (id: string) => void;
-  createProduct: (input: { name: string; sku: string; price: number; stock: number }) => void;
-  updateProduct: (id: string, input: { name: string; sku: string; price: number; stock: number }) => void;
+  createProduct: (input: { name: string; sku: string; price: number; stock: number; variants?: ProductVariant[] }) => void;
+  updateProduct: (id: string, input: { name: string; sku: string; price: number; stock: number; variants?: ProductVariant[] }) => void;
   deleteProduct: (id: string) => void;
 };
 
@@ -113,6 +126,162 @@ const seedCustomers: Customer[] = seeded([
 ]);
 
 const seedProducts: Product[] = seeded([
+  {
+    id: "prd_can_cooler",
+    name: "Can Cooler",
+    sku: "SKU-CC-001",
+    price: 14,
+    stock: 120,
+    variants: [
+      {
+        id: "var_cc_black",
+        name: "Black",
+        sku: "SKU-CC-001-BLK",
+        priceDelta: 0,
+        stock: 52,
+        options: { color: "Black" },
+      },
+      {
+        id: "var_cc_sand",
+        name: "Sand",
+        sku: "SKU-CC-001-SND",
+        priceDelta: 0,
+        stock: 38,
+        options: { color: "Sand" },
+      },
+      {
+        id: "var_cc_ocean",
+        name: "Ocean",
+        sku: "SKU-CC-001-OCN",
+        priceDelta: 1,
+        stock: 30,
+        options: { color: "Ocean" },
+      },
+    ],
+  },
+  {
+    id: "prd_cap",
+    name: "Cap",
+    sku: "SKU-CP-010",
+    price: 24,
+    stock: 68,
+    variants: [
+      {
+        id: "var_cap_navy",
+        name: "Navy",
+        sku: "SKU-CP-010-NVY",
+        priceDelta: 0,
+        stock: 22,
+        options: { color: "Navy" },
+      },
+      {
+        id: "var_cap_black",
+        name: "Black",
+        sku: "SKU-CP-010-BLK",
+        priceDelta: 0,
+        stock: 28,
+        options: { color: "Black" },
+      },
+      {
+        id: "var_cap_cream",
+        name: "Cream",
+        sku: "SKU-CP-010-CRM",
+        priceDelta: 0,
+        stock: 18,
+        options: { color: "Cream" },
+      },
+    ],
+  },
+  {
+    id: "prd_tshirt",
+    name: "T-Shirts",
+    sku: "SKU-TS-100",
+    price: 32,
+    stock: 94,
+    variants: [
+      {
+        id: "var_ts_s_black",
+        name: "S / Black",
+        sku: "SKU-TS-100-S-BLK",
+        priceDelta: 0,
+        stock: 14,
+        options: { size: "S", color: "Black" },
+      },
+      {
+        id: "var_ts_m_black",
+        name: "M / Black",
+        sku: "SKU-TS-100-M-BLK",
+        priceDelta: 0,
+        stock: 18,
+        options: { size: "M", color: "Black" },
+      },
+      {
+        id: "var_ts_l_black",
+        name: "L / Black",
+        sku: "SKU-TS-100-L-BLK",
+        priceDelta: 0,
+        stock: 12,
+        options: { size: "L", color: "Black" },
+      },
+      {
+        id: "var_ts_m_sand",
+        name: "M / Sand",
+        sku: "SKU-TS-100-M-SND",
+        priceDelta: 0,
+        stock: 16,
+        options: { size: "M", color: "Sand" },
+      },
+      {
+        id: "var_ts_l_sand",
+        name: "L / Sand",
+        sku: "SKU-TS-100-L-SND",
+        priceDelta: 0,
+        stock: 14,
+        options: { size: "L", color: "Sand" },
+      },
+      {
+        id: "var_ts_xl_ocean",
+        name: "XL / Ocean",
+        sku: "SKU-TS-100-XL-OCN",
+        priceDelta: 2,
+        stock: 20,
+        options: { size: "XL", color: "Ocean" },
+      },
+    ],
+  },
+  {
+    id: "prd_cup",
+    name: "Cup",
+    sku: "SKU-CUP-020",
+    price: 18,
+    stock: 44,
+    variants: [
+      {
+        id: "var_cup_12_black",
+        name: "12oz / Black",
+        sku: "SKU-CUP-020-12-BLK",
+        priceDelta: 0,
+        stock: 12,
+        options: { size: "12oz", color: "Black" },
+      },
+      {
+        id: "var_cup_12_sand",
+        name: "12oz / Sand",
+        sku: "SKU-CUP-020-12-SND",
+        priceDelta: 0,
+        stock: 10,
+        options: { size: "12oz", color: "Sand" },
+      },
+      {
+        id: "var_cup_16_ocean",
+        name: "16oz / Ocean",
+        sku: "SKU-CUP-020-16-OCN",
+        priceDelta: 2,
+        stock: 22,
+        options: { size: "16oz", color: "Ocean" },
+      },
+    ],
+  },
   {
     id: "prd_scanner",
     name: "Wireless Barcode Scanner",
@@ -234,7 +403,7 @@ export function DemoDataProvider({ children }: PropsWithChildren) {
       setOrders((prev) => prev.filter((o) => o.id !== id));
     }
 
-    function createProduct(input: { name: string; sku: string; price: number; stock: number }) {
+    function createProduct(input: { name: string; sku: string; price: number; stock: number; variants?: ProductVariant[] }) {
       setProducts((prev) => [
         {
           id: uid("prd"),
@@ -242,12 +411,16 @@ export function DemoDataProvider({ children }: PropsWithChildren) {
           sku: input.sku,
           price: input.price,
           stock: input.stock,
+          variants: input.variants,
         },
         ...prev,
       ]);
     }
 
-    function updateProduct(id: string, input: { name: string; sku: string; price: number; stock: number }) {
+    function updateProduct(
+      id: string,
+      input: { name: string; sku: string; price: number; stock: number; variants?: ProductVariant[] },
+    ) {
       setProducts((prev) =>
         prev.map((p) =>
           p.id === id
@@ -257,6 +430,7 @@ export function DemoDataProvider({ children }: PropsWithChildren) {
                 sku: input.sku,
                 price: input.price,
                 stock: input.stock,
+                variants: input.variants,
               }
             : p,
         ),

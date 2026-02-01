@@ -28,9 +28,32 @@ const ProductSchema = z.object({
   sku: z.string().min(3),
   price: z.coerce.number().min(0.01),
   stock: z.coerce.number().min(0),
+  variants: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        name: z.string().min(1),
+        sku: z.string().min(3),
+        priceDelta: z.coerce.number().min(0),
+        stock: z.coerce.number().min(0),
+        size: z.string().optional(),
+        color: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 type ProductFormValues = z.infer<typeof ProductSchema>;
+
+type VariantFormRow = {
+  id?: string;
+  name: string;
+  sku: string;
+  priceDelta: number;
+  stock: number;
+  size?: string;
+  color?: string;
+};
 
 function StockBadge({ stock }: { stock: number }) {
   if (stock <= 8) {
@@ -77,6 +100,7 @@ export default function ProductsPage() {
       sku: "",
       price: 0,
       stock: 0,
+      variants: [],
     },
   });
 
@@ -99,6 +123,7 @@ export default function ProductsPage() {
           sku: `SKU-${Math.floor(100 + Math.random() * 900)}`,
           price: 99,
           stock: 25,
+          variants: [],
         });
         setOpen(true);
       },
@@ -115,15 +140,49 @@ export default function ProductsPage() {
       sku: p.sku,
       price: p.price,
       stock: p.stock,
+      variants:
+        p.variants?.map((v) => ({
+          id: v.id,
+          name: v.name,
+          sku: v.sku,
+          priceDelta: v.priceDelta,
+          stock: v.stock,
+          size: v.options.size,
+          color: v.options.color,
+        })) ?? [],
     });
     setOpen(true);
   }
 
   function onSubmit(values: ProductFormValues) {
+    const variants = (values.variants ?? []) as VariantFormRow[];
+
+    const normalized = variants
+      .filter((v) => (v.name ?? "").trim().length > 0)
+      .map((v) => ({
+        id: v.id ?? `var_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`,
+        name: v.name,
+        sku: v.sku,
+        priceDelta: Number(v.priceDelta ?? 0),
+        stock: Number(v.stock ?? 0),
+        options: {
+          size: v.size?.trim() ? v.size.trim() : undefined,
+          color: v.color?.trim() ? v.color.trim() : undefined,
+        },
+      }));
+
+    const payload = {
+      name: values.name,
+      sku: values.sku,
+      price: Number(values.price),
+      stock: Number(values.stock),
+      variants: normalized.length ? normalized : undefined,
+    };
+
     if (editingId) {
-      updateProduct(editingId, values);
+      updateProduct(editingId, payload);
     } else {
-      createProduct(values);
+      createProduct(payload);
     }
     setOpen(false);
     setEditingId(null);
@@ -160,52 +219,66 @@ export default function ProductsPage() {
                 <TableRow>
                   <TableHead>Product</TableHead>
                   <TableHead>SKU</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
+                  <TableHead className="text-right">Base price</TableHead>
+                  <TableHead className="text-right">Variants</TableHead>
                   <TableHead className="text-right">Stock</TableHead>
                   <TableHead className="text-right">Health</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((p: Product) => (
-                  <TableRow key={p.id} data-testid={`row-product-${p.id}`}>
-                    <TableCell className="title font-semibold" data-testid={`text-product-name-${p.id}`}>
-                      {p.name}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground" data-testid={`text-product-sku-${p.id}`}>
-                      {p.sku}
-                    </TableCell>
-                    <TableCell className="text-right" data-testid={`text-product-price-${p.id}`}>
-                      {formatCurrency(p.price)}
-                    </TableCell>
-                    <TableCell className="text-right" data-testid={`text-product-stock-${p.id}`}>
-                      {p.stock}
-                    </TableCell>
-                    <TableCell className="text-right" data-testid={`text-product-health-${p.id}`}>
-                      <StockBadge stock={p.stock} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="secondary"
-                          className="h-9"
-                          onClick={() => openEdit(p.id)}
-                          data-testid={`button-edit-product-${p.id}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          className="h-9"
-                          onClick={() => deleteProduct(p.id)}
-                          data-testid={`button-delete-product-${p.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filtered.map((p: Product) => {
+                  const variantCount = p.variants?.length ?? 0;
+                  const variantStock = p.variants?.reduce((sum, v) => sum + v.stock, 0) ?? 0;
+                  const stock = variantCount ? variantStock : p.stock;
+
+                  return (
+                    <TableRow key={p.id} data-testid={`row-product-${p.id}`}>
+                      <TableCell className="title font-semibold" data-testid={`text-product-name-${p.id}`}>
+                        {p.name}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground" data-testid={`text-product-sku-${p.id}`}>
+                        {p.sku}
+                      </TableCell>
+                      <TableCell className="text-right" data-testid={`text-product-price-${p.id}`}>
+                        {formatCurrency(p.price)}
+                      </TableCell>
+                      <TableCell className="text-right" data-testid={`text-product-variant-count-${p.id}`}>
+                        {variantCount ? (
+                          <Badge className="border border-border bg-secondary/70 text-foreground">{variantCount}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right" data-testid={`text-product-stock-${p.id}`}>
+                        {stock}
+                      </TableCell>
+                      <TableCell className="text-right" data-testid={`text-product-health-${p.id}`}>
+                        <StockBadge stock={stock} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="secondary"
+                            className="h-9"
+                            onClick={() => openEdit(p.id)}
+                            data-testid={`button-edit-product-${p.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            className="h-9"
+                            onClick={() => deleteProduct(p.id)}
+                            data-testid={`button-delete-product-${p.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -221,6 +294,170 @@ export default function ProductsPage() {
           </DialogHeader>
 
           <form onSubmit={form.handleSubmit(onSubmit)} className="mt-1 space-y-3" data-testid="form-product">
+            <div className="rounded-xl border border-border bg-background/60 p-3" data-testid="panel-variants">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="title text-sm font-semibold" data-testid="text-variants-title">Variants</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground" data-testid="text-variants-subtitle">
+                    Add size/color variants with SKU, stock, and optional price delta.
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-9"
+                  onClick={() => {
+                    const prev = (form.getValues("variants") ?? []) as VariantFormRow[];
+                    form.setValue(
+                      "variants",
+                      [
+                        ...prev,
+                        {
+                          name: "",
+                          sku: `SKU-${Math.floor(100 + Math.random() * 900)}-${Math.floor(10 + Math.random() * 90)}`,
+                          priceDelta: 0,
+                          stock: 0,
+                          size: "",
+                          color: "",
+                        },
+                      ],
+                      { shouldDirty: true },
+                    );
+                  }}
+                  data-testid="button-add-variant"
+                >
+                  Add variant
+                </Button>
+              </div>
+
+              <div className="mt-3 space-y-2" data-testid="list-variants">
+                {(form.watch("variants") ?? []).length === 0 ? (
+                  <div className="rounded-lg border border-border bg-background/60 p-3 text-sm text-muted-foreground" data-testid="text-variants-empty">
+                    No variants yet. Add one to manage size/color inventory.
+                  </div>
+                ) : null}
+
+                {(form.watch("variants") ?? []).map((v, idx) => (
+                  <div
+                    key={`${v.sku}-${idx}`}
+                    className="rounded-xl border border-border bg-background/70 p-3"
+                    data-testid={`row-variant-${idx}`}
+                  >
+                    <div className="grid gap-2 md:grid-cols-[1.2fr_1fr_0.7fr_0.7fr_auto]">
+                      <div>
+                        <div className="text-xs text-muted-foreground" data-testid={`label-variant-name-${idx}`}>Name</div>
+                        <Input
+                          value={v.name}
+                          onChange={(e) => {
+                            const next = [...((form.getValues("variants") ?? []) as VariantFormRow[])];
+                            next[idx] = { ...next[idx], name: e.target.value };
+                            form.setValue("variants", next, { shouldDirty: true });
+                          }}
+                          className="mt-1 h-10"
+                          placeholder="M / Black"
+                          data-testid={`input-variant-name-${idx}`}
+                        />
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-muted-foreground" data-testid={`label-variant-sku-${idx}`}>SKU</div>
+                        <Input
+                          value={v.sku}
+                          onChange={(e) => {
+                            const next = [...((form.getValues("variants") ?? []) as VariantFormRow[])];
+                            next[idx] = { ...next[idx], sku: e.target.value };
+                            form.setValue("variants", next, { shouldDirty: true });
+                          }}
+                          className="mt-1 h-10"
+                          placeholder="SKU-TS-100-M-BLK"
+                          data-testid={`input-variant-sku-${idx}`}
+                        />
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-muted-foreground" data-testid={`label-variant-size-${idx}`}>Size</div>
+                        <Input
+                          value={v.size ?? ""}
+                          onChange={(e) => {
+                            const next = [...((form.getValues("variants") ?? []) as VariantFormRow[])];
+                            next[idx] = { ...next[idx], size: e.target.value };
+                            form.setValue("variants", next, { shouldDirty: true });
+                          }}
+                          className="mt-1 h-10"
+                          placeholder="M"
+                          data-testid={`input-variant-size-${idx}`}
+                        />
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-muted-foreground" data-testid={`label-variant-color-${idx}`}>Color</div>
+                        <Input
+                          value={v.color ?? ""}
+                          onChange={(e) => {
+                            const next = [...((form.getValues("variants") ?? []) as VariantFormRow[])];
+                            next[idx] = { ...next[idx], color: e.target.value };
+                            form.setValue("variants", next, { shouldDirty: true });
+                          }}
+                          className="mt-1 h-10"
+                          placeholder="Black"
+                          data-testid={`input-variant-color-${idx}`}
+                        />
+                      </div>
+
+                      <div className="flex items-end justify-end">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          className="h-10"
+                          onClick={() => {
+                            const prev = (form.getValues("variants") ?? []) as VariantFormRow[];
+                            const next = prev.filter((_, i) => i !== idx);
+                            form.setValue("variants", next, { shouldDirty: true });
+                          }}
+                          data-testid={`button-remove-variant-${idx}`}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <div className="text-xs text-muted-foreground" data-testid={`label-variant-price-delta-${idx}`}>Price delta</div>
+                        <div className="relative mt-1">
+                          <DollarSign className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            value={String(v.priceDelta ?? 0)}
+                            onChange={(e) => {
+                              const next = [...((form.getValues("variants") ?? []) as VariantFormRow[])];
+                              next[idx] = { ...next[idx], priceDelta: Number(e.target.value || 0) };
+                              form.setValue("variants", next, { shouldDirty: true });
+                            }}
+                            className="h-10 pl-9"
+                            inputMode="decimal"
+                            data-testid={`input-variant-price-delta-${idx}`}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground" data-testid={`label-variant-stock-${idx}`}>Stock</div>
+                        <Input
+                          value={String(v.stock ?? 0)}
+                          onChange={(e) => {
+                            const next = [...((form.getValues("variants") ?? []) as VariantFormRow[])];
+                            next[idx] = { ...next[idx], stock: Number(e.target.value || 0) };
+                            form.setValue("variants", next, { shouldDirty: true });
+                          }}
+                          className="mt-1 h-10"
+                          inputMode="numeric"
+                          data-testid={`input-variant-stock-${idx}`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
             <Field>
               <FieldLabel data-testid="label-product-name">Name</FieldLabel>
               <FieldContent>

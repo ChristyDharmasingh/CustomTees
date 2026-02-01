@@ -42,28 +42,32 @@ function NavItem({
 }) {
   return (
     <Link href={href}>
-      <a
-        className={`group relative flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition ${
+      <Button
+        asChild
+        variant="ghost"
+        className={`group relative h-auto w-full justify-start gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
           active
-            ? "border-border bg-secondary/70 text-foreground"
-            : "border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground"
+            ? "border border-border bg-secondary/70 text-foreground"
+            : "border border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground"
         }`}
         data-testid={testId}
       >
-        <span
-          className={`grid h-9 w-9 place-items-center rounded-lg border bg-background/60 transition ${
-            active
-              ? "border-border"
-              : "border-transparent group-hover:border-border"
-          }`}
-          data-testid={`${testId}-icon`}
-        >
-          <Icon className="h-4 w-4" />
-        </span>
-        <span className="title font-semibold" data-testid={`${testId}-label`}>
-          {label}
-        </span>
-      </a>
+        <a>
+          <span
+            className={`grid h-9 w-9 place-items-center rounded-lg border bg-background/60 transition ${
+              active
+                ? "border-border"
+                : "border-transparent group-hover:border-border"
+            }`}
+            data-testid={`${testId}-icon`}
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+          <span className="title font-semibold" data-testid={`${testId}-label`}>
+            {label}
+          </span>
+        </a>
+      </Button>
     </Link>
   );
 }
