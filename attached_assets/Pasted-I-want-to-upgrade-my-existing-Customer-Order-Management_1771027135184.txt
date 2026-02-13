@@ -1,0 +1,147 @@
+I want to upgrade my existing Customer Order Management System into a production-ready internal business application.
+
+Current State:
+- Frontend-only application
+- Data stored in browser session
+- No backend or persistent database
+
+I need the following upgrades:
+
+1. ARCHITECTURE CHANGES
+- Add a backend using Node.js + Express (or Next.js API routes if more appropriate)
+- Connect to a PostgreSQL database (prefer Supabase or Neon)
+- Implement REST API for all operations
+- Remove all session-based storage
+- Implement proper environment variables for secrets
+
+2. DATABASE DESIGN
+
+Create relational tables:
+
+Users
+- id
+- name
+- email
+- password_hash
+- role (admin, employee)
+- created_at
+
+Customers
+- id
+- name
+- email
+- phone
+- address
+- created_at
+
+Products
+- id
+- name
+- sku
+- base_price
+- stock_quantity
+- low_stock_threshold
+- created_at
+- updated_at
+
+Orders
+- id
+- customer_id
+- total_amount
+- status
+- created_at
+
+OrderItems
+- id
+- order_id
+- product_id
+- quantity
+- price_at_time
+
+Purchases (Inventory procurement tracking)
+- id
+- product_id
+- quantity
+- cost
+- purchased_at
+
+3. LEFT MENU RESTRUCTURE
+
+Reorganize the navigation to:
+
+Dashboard
+
+Operations
+- Orders
+- New Order
+- Customers
+- Add Customer
+
+Inventory
+- All Products
+- Add Product
+- Stock Levels
+- Low Stock Alerts
+
+Analytics
+- Sales Overview
+- Product Performance
+- Monthly Revenue
+- Monthly Purchases
+
+Settings
+
+4. FEATURE REQUIREMENTS
+
+Inventory:
+- Auto deduct stock when order is created
+- Show low stock alerts
+- Stock history tracking
+
+Orders:
+- Manual order creation
+- Multi-product support per order
+- Link orders to customers
+
+Customers:
+- Add new customer
+- View customer order history
+- Calculate lifetime value
+
+Analytics:
+- Total revenue
+- Revenue by product
+- Units sold per product
+- Monthly sales aggregation
+- Monthly purchase costs
+- Best selling products
+
+5. PRODUCTION READINESS
+
+Implement:
+- JWT authentication
+- Role-based access control
+- Password hashing (bcrypt)
+- Input validation (Zod or Joi)
+- Centralized error handling
+- API logging
+- Rate limiting
+- Proper folder structure
+- Clean modular architecture
+
+6. DEPLOYMENT
+
+Provide:
+- Recommended low-cost hosting strategy
+- Instructions for deploying frontend and backend separately
+- Environment variable configuration guide
+- Database migration scripts
+
+The application is internal-only and used by employees.
+Focus on maintainability, scalability, and cost-efficiency.
+
+Generate:
+- Backend structure
+- API endpoints
+- Updated frontend integration
+- Deployment steps
