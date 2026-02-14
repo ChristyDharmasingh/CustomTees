@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { storage } from "./storage";
+import { hashPassword } from "./auth";
 
 const app = express();
 const httpServer = createServer(app);
@@ -60,6 +62,23 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  try {
+    const existingAdmin = await storage.getUserByEmail("admin@company.com");
+    if (!existingAdmin) {
+      log("No admin user found, creating default admin...");
+      const passwordHash = await hashPassword("admin123");
+      await storage.createUser({
+        email: "admin@company.com",
+        passwordHash,
+        name: "Admin",
+        role: "admin",
+      });
+      log("Default admin user created successfully");
+    }
+  } catch (err) {
+    console.error("Failed to auto-seed admin user:", err);
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
