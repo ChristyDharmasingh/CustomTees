@@ -4,6 +4,11 @@
 Production-ready internal tool for managing customers, orders, products (with variant support), and analytics. Built with a full-stack architecture using Express + React with PostgreSQL database.
 
 ## Recent Changes
+- **Feb 14, 2026**: Added User Management page (admin-only)
+  - API endpoints: GET/POST /api/users, DELETE /api/users/:id (admin-only)
+  - User Management page under Settings > User Management (/settings/users)
+  - Admin-only nav items hidden from employee users
+  - Auto-seed admin user on server startup when database is empty
 - **Feb 14, 2026**: Full-stack implementation complete
   - PostgreSQL database with Drizzle ORM
   - JWT authentication with role-based access (admin/employee)
@@ -58,4 +63,4 @@ shared/
 - Operations: Orders, New Order, Customers, Add Customer
 - Inventory: All Products, Add Product, Stock Levels, Low Stock Alerts
 - Analytics: Sales Overview, Product Performance, Monthly Revenue, Monthly Purchases
-- Settings
+- Settings: Preferences, User Management (admin-only)
