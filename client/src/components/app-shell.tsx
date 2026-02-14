@@ -1,16 +1,29 @@
 import { PropsWithChildren, ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import {
+  AlertTriangle,
+  BarChart3,
   Boxes,
+  ChevronDown,
+  DollarSign,
   LayoutDashboard,
+  LogOut,
   Package,
+  PackagePlus,
+  Plus,
   ReceiptText,
   Settings,
+  ShoppingCart,
+  TrendingUp,
   Users,
+  UserPlus,
+  Warehouse,
 } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/lib/auth";
 
 export type TopBarAction = {
   label: string;
@@ -20,11 +33,56 @@ export type TopBarAction = {
   testId: string;
 };
 
-const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "link-nav-dashboard" },
-  { href: "/orders", label: "Orders", icon: ReceiptText, testId: "link-nav-orders" },
-  { href: "/customers", label: "Customers", icon: Users, testId: "link-nav-customers" },
-  { href: "/products", label: "Products", icon: Package, testId: "link-nav-products" },
+type NavSection = {
+  title: string;
+  items: {
+    href: string;
+    label: string;
+    icon: any;
+    testId: string;
+  }[];
+};
+
+const navSections: NavSection[] = [
+  {
+    title: "",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testId: "link-nav-dashboard" },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      { href: "/orders", label: "Orders", icon: ReceiptText, testId: "link-nav-orders" },
+      { href: "/orders/new", label: "New Order", icon: ShoppingCart, testId: "link-nav-new-order" },
+      { href: "/customers", label: "Customers", icon: Users, testId: "link-nav-customers" },
+      { href: "/customers/new", label: "Add Customer", icon: UserPlus, testId: "link-nav-add-customer" },
+    ],
+  },
+  {
+    title: "Inventory",
+    items: [
+      { href: "/products", label: "All Products", icon: Package, testId: "link-nav-products" },
+      { href: "/products/new", label: "Add Product", icon: PackagePlus, testId: "link-nav-add-product" },
+      { href: "/inventory/stock", label: "Stock Levels", icon: Warehouse, testId: "link-nav-stock" },
+      { href: "/inventory/low-stock", label: "Low Stock Alerts", icon: AlertTriangle, testId: "link-nav-low-stock" },
+    ],
+  },
+  {
+    title: "Analytics",
+    items: [
+      { href: "/analytics/sales", label: "Sales Overview", icon: BarChart3, testId: "link-nav-sales" },
+      { href: "/analytics/products", label: "Product Performance", icon: TrendingUp, testId: "link-nav-product-perf" },
+      { href: "/analytics/revenue", label: "Monthly Revenue", icon: DollarSign, testId: "link-nav-revenue" },
+      { href: "/analytics/purchases", label: "Monthly Purchases", icon: ShoppingCart, testId: "link-nav-purchases" },
+    ],
+  },
+  {
+    title: "",
+    items: [
+      { href: "/settings", label: "Settings", icon: Settings, testId: "link-nav-settings" },
+    ],
+  },
 ];
 
 function NavItem({
@@ -42,32 +100,17 @@ function NavItem({
 }) {
   return (
     <Link href={href}>
-      <Button
-        asChild
-        variant="ghost"
-        className={`group relative h-auto w-full justify-start gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
+      <a
+        className={`group relative flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition ${
           active
-            ? "border border-border bg-secondary/70 text-foreground"
-            : "border border-transparent text-muted-foreground hover:border-border hover:bg-background/70 hover:text-foreground"
+            ? "bg-secondary/70 text-foreground font-medium"
+            : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
         }`}
         data-testid={testId}
       >
-        <a>
-          <span
-            className={`grid h-9 w-9 place-items-center rounded-lg border bg-background/60 transition ${
-              active
-                ? "border-border"
-                : "border-transparent group-hover:border-border"
-            }`}
-            data-testid={`${testId}-icon`}
-          >
-            <Icon className="h-4 w-4" />
-          </span>
-          <span className="title font-semibold" data-testid={`${testId}-label`}>
-            {label}
-          </span>
-        </a>
-      </Button>
+        <Icon className="h-4 w-4 shrink-0" />
+        <span data-testid={`${testId}-label`}>{label}</span>
+      </a>
     </Link>
   );
 }
@@ -83,64 +126,65 @@ export function AppShell({
   actions?: TopBarAction[];
 }>) {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-app">
-      <div className="mx-auto grid max-w-[1280px] grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[300px_1fr] lg:px-6">
+      <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[260px_1fr] lg:px-6">
         <aside className="glass grain soft-ring h-fit rounded-2xl border border-border p-4 lg:sticky lg:top-6">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div
-                className="grid h-11 w-11 place-items-center rounded-2xl border border-border bg-background/70 shadow-sm"
-                data-testid="img-app-mark"
-              >
-                <Boxes className="h-5 w-5" />
+          <div className="flex items-center gap-3">
+            <div
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-background/70 shadow-sm"
+              data-testid="img-app-mark"
+            >
+              <Boxes className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="title truncate text-sm font-semibold" data-testid="text-app-name">
+                Order Manager
               </div>
-              <div className="min-w-0">
-                <div className="title truncate text-sm font-semibold" data-testid="text-app-name">
-                  Customer Order
-                </div>
-                <div className="truncate text-xs text-muted-foreground" data-testid="text-app-subtitle">
-                  Management System
-                </div>
+              <div className="truncate text-xs text-muted-foreground" data-testid="text-app-subtitle">
+                {user?.name ?? "Internal Tool"}
               </div>
             </div>
-
-            <Button
-              variant="secondary"
-              className="h-10"
-              data-testid="button-settings"
-              onClick={() => {
-                document.documentElement.classList.toggle("dark");
-              }}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
           </div>
 
-          <Separator className="my-4" />
+          <Separator className="my-3" />
 
-          <nav className="space-y-2" data-testid="nav-primary">
-            {nav.map((n) => (
-              <NavItem
-                key={n.href}
-                href={n.href}
-                label={n.label}
-                icon={n.icon}
-                active={location === n.href}
-                testId={n.testId}
-              />
+          <nav className="space-y-4" data-testid="nav-primary">
+            {navSections.map((section, si) => (
+              <div key={si}>
+                {section.title ? (
+                  <div className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70" data-testid={`text-nav-section-${section.title.toLowerCase()}`}>
+                    {section.title}
+                  </div>
+                ) : null}
+                <div className="space-y-0.5">
+                  {section.items.map((n) => (
+                    <NavItem
+                      key={n.href}
+                      href={n.href}
+                      label={n.label}
+                      icon={n.icon}
+                      active={location === n.href}
+                      testId={n.testId}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
 
-          <Separator className="my-4" />
+          <Separator className="my-3" />
 
-          <div className="rounded-xl border border-border bg-background/60 p-3" data-testid="panel-sidebar-note">
-            <div className="title text-sm font-semibold">Demo mode</div>
-            <div className="mt-1 text-xs text-muted-foreground" data-testid="text-demo-note">
-              All data lives in your browser session (no backend). Use create/edit to simulate workflows.
-            </div>
-          </div>
+          <button
+            onClick={logout}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-background/70 hover:text-foreground"
+            data-testid="button-logout"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Sign out</span>
+          </button>
         </aside>
 
         <main className="min-w-0">

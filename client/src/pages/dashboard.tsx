@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useEffect } from "react";
+import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowRight,
@@ -28,7 +29,8 @@ import { Separator } from "@/components/ui/separator";
 
 import { AppShell, TopBarAction } from "../components/app-shell";
 import { formatCurrency, formatDateShort } from "../lib/format";
-import { useDemoData, Order, Product } from "../lib/demo-data";
+import { apiRequest } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 function StatCard({
   title,
@@ -80,61 +82,89 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const { orders, customers, products } = useDemoData();
-  const [range, setRange] = useState<"30d" | "90d">("30d");
+  const { isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
 
-  const stats = useMemo(() => {
-    const totalSales = orders
-      .filter((o: Order) => o.status !== "Cancelled")
-      .reduce((sum: number, o: Order) => sum + o.total, 0);
-    const pending = orders.filter((o: Order) => o.status === "Pending").length;
-    const shipped = orders.filter((o: Order) => o.status === "Shipped").length;
-    const lowStock = products.filter((p: Product) => p.stock <= 12).length;
-
-    return {
-      totalSales,
-      pending,
-      shipped,
-      lowStock,
-    };
-  }, [orders, products]);
-
-  const series = useMemo(() => {
-    const days = range === "30d" ? 30 : 90;
-    const byDay = new Map<string, number>();
-
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      byDay.set(key, 0);
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLocation("/login");
     }
+  }, [isAuthenticated, setLocation]);
 
-    for (const o of orders) {
-      if (o.status === "Cancelled") continue;
-      const key = o.createdAt.toISOString().slice(0, 10);
-      if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + o.total);
-    }
+  const { data: overview, isLoading: overviewLoading } = useQuery({
+    queryKey: ["analytics-overview"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/analytics/overview");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
 
-    const rows = Array.from(byDay.entries()).map(([date, revenue]) => ({
-      date,
-      revenue,
-    }));
+  const { data: orders, isLoading: ordersLoading } = useQuery({
+    queryKey: ["orders"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/orders");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
 
+  const { data: monthlyRevenue, isLoading: revenueLoading } = useQuery({
+    queryKey: ["analytics-revenue-monthly"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/analytics/revenue/monthly?months=3");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: lowStockProducts, isLoading: lowStockLoading } = useQuery({
+    queryKey: ["low-stock-products"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/products/alerts/low-stock");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  const isLoading = overviewLoading || ordersLoading || revenueLoading || lowStockLoading;
+
+  if (isLoading) {
+    return (
+      <AppShell title="Dashboard" subtitle="Sales, fulfillment, and activity at a glance">
+        <div className="flex items-center justify-center py-20 text-muted-foreground">
+          Loading...
+        </div>
+      </AppShell>
+    );
+  }
+
+  const totalRevenue = overview?.totalRevenue ?? 0;
+  const totalOrders = overview?.totalOrders ?? 0;
+  const averageOrderValue = overview?.averageOrderValue ?? 0;
+  const totalCustomers = overview?.totalCustomers ?? 0;
+
+  const pendingOrders = (orders ?? []).filter((o: any) => o.status === "pending").length;
+  const shippedOrders = (orders ?? []).filter((o: any) => o.status === "shipped").length;
+  const lowStockCount = (lowStockProducts ?? []).length;
+
+  const series = (monthlyRevenue ?? []).map((item: any, index: number) => {
     let running = 0;
-    return rows.map((r) => {
-      running += r.revenue;
-      return {
-        ...r,
-        running,
-      };
-    });
-  }, [orders, range]);
+    for (let i = 0; i <= index; i++) {
+      running += parseFloat((monthlyRevenue as any[])[i].revenue) || 0;
+    }
+    return {
+      date: item.month,
+      revenue: parseFloat(item.revenue) || 0,
+      running,
+    };
+  });
 
-  const recent = useMemo(() => {
-    const sorted = [...orders].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    return sorted.slice(0, 6);
-  }, [orders]);
+  const recent = (orders ?? []).slice(0, 6);
 
   const actions: TopBarAction[] = [
     {
@@ -154,7 +184,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Total sales"
-          value={formatCurrency(stats.totalSales)}
+          value={formatCurrency(parseFloat(totalRevenue) || 0)}
           delta={"+12.4% MoM"}
           hint="Excludes cancelled orders"
           icon={<BadgeDollarSign className="h-5 w-5" />}
@@ -162,21 +192,21 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Pending orders"
-          value={String(stats.pending)}
+          value={String(pendingOrders)}
           delta="Needs attention"
           icon={<Activity className="h-5 w-5" />}
           testId="card-pending-orders"
         />
         <StatCard
           title="Shipped (7d)"
-          value={String(stats.shipped)}
+          value={String(shippedOrders)}
           delta="On track"
           icon={<Truck className="h-5 w-5" />}
           testId="card-shipped-orders"
         />
         <StatCard
           title="Low stock items"
-          value={String(stats.lowStock)}
+          value={String(lowStockCount)}
           delta="Restock soon"
           icon={<Box className="h-5 w-5" />}
           testId="card-low-stock"
@@ -192,27 +222,8 @@ export default function DashboardPage() {
                   Revenue trend
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground" data-testid="text-revenue-subtitle">
-                  Cumulative revenue over the selected period
+                  Monthly revenue over the last 3 months
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={range === "30d" ? "default" : "secondary"}
-                  className="h-9"
-                  onClick={() => setRange("30d")}
-                  data-testid="button-range-30d"
-                >
-                  30d
-                </Button>
-                <Button
-                  variant={range === "90d" ? "default" : "secondary"}
-                  className="h-9"
-                  onClick={() => setRange("90d")}
-                  data-testid="button-range-90d"
-                >
-                  90d
-                </Button>
               </div>
             </div>
 
@@ -267,7 +278,7 @@ export default function DashboardPage() {
                   <Area
                     type="monotone"
                     dataKey="revenue"
-                    name="Daily"
+                    name="Monthly"
                     stroke="hsl(var(--chart-1))"
                     strokeWidth={2}
                     fill="url(#rev)"
@@ -283,16 +294,16 @@ export default function DashboardPage() {
               <div className="rounded-xl border border-border bg-background/60 p-4" data-testid="panel-kpi-aov">
                 <div className="text-xs text-muted-foreground">Avg. order value</div>
                 <div className="mt-1 title text-lg font-semibold">
-                  {formatCurrency(stats.totalSales / Math.max(1, orders.length))}
+                  {formatCurrency(parseFloat(averageOrderValue) || 0)}
                 </div>
               </div>
               <div className="rounded-xl border border-border bg-background/60 p-4" data-testid="panel-kpi-customers">
                 <div className="text-xs text-muted-foreground">Customers</div>
-                <div className="mt-1 title text-lg font-semibold">{customers.length}</div>
+                <div className="mt-1 title text-lg font-semibold">{totalCustomers}</div>
               </div>
               <div className="rounded-xl border border-border bg-background/60 p-4" data-testid="panel-kpi-products">
                 <div className="text-xs text-muted-foreground">Active products</div>
-                <div className="mt-1 title text-lg font-semibold">{products.length}</div>
+                <div className="mt-1 title text-lg font-semibold">{totalOrders}</div>
               </div>
             </div>
           </div>
@@ -317,7 +328,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-5 space-y-3" data-testid="list-recent-activity">
-              {recent.map((o) => (
+              {recent.map((o: any) => (
                 <div
                   key={o.id}
                   className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background/60 p-3"
@@ -326,7 +337,7 @@ export default function DashboardPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <div className="title truncate text-sm font-semibold" data-testid={`text-recent-order-title-${o.id}`}>
-                        {o.orderNumber}
+                        Order #{o.id}
                       </div>
                       <Badge className="border border-border bg-secondary/70 text-foreground">{o.status}</Badge>
                     </div>
@@ -334,23 +345,23 @@ export default function DashboardPage() {
                       <Users className="h-3.5 w-3.5" />
                       <span data-testid={`text-recent-order-customer-${o.id}`}>{o.customerName}</span>
                       <span className="opacity-60">•</span>
-                      <span data-testid={`text-recent-order-date-${o.id}`}>{formatDateShort(o.createdAt)}</span>
+                      <span data-testid={`text-recent-order-date-${o.id}`}>{formatDateShort(new Date(o.createdAt))}</span>
                     </div>
                   </div>
 
                   <div className="text-right">
                     <div className="title text-sm font-semibold" data-testid={`text-recent-order-total-${o.id}`}>
-                      {formatCurrency(o.total)}
+                      {formatCurrency(parseFloat(o.totalAmount) || 0)}
                     </div>
                     <div className="mt-1 flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                      {o.status === "Shipped" ? (
+                      {o.status === "shipped" ? (
                         <Truck className="h-3.5 w-3.5" />
-                      ) : o.status === "Cancelled" ? (
+                      ) : o.status === "cancelled" ? (
                         <CreditCard className="h-3.5 w-3.5" />
                       ) : (
                         <Package className="h-3.5 w-3.5" />
                       )}
-                      <span>{o.status === "Cancelled" ? "Refund initiated" : "Updated"}</span>
+                      <span>{o.status === "cancelled" ? "Refund initiated" : "Updated"}</span>
                     </div>
                   </div>
                 </div>

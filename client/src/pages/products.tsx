@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { Box, DollarSign, PackagePlus, Pencil, Search, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,21 +23,43 @@ import {
 
 import { AppShell, TopBarAction } from "../components/app-shell";
 import { formatCurrency } from "../lib/format";
-import { useDemoData, Product } from "../lib/demo-data";
+import { useAuth } from "@/lib/auth";
+import { apiRequest } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
+
+type Variant = {
+  id: number;
+  name: string;
+  sku: string;
+  priceDelta: string;
+  stockQuantity: number;
+  options: { size?: string; color?: string };
+};
+
+type Product = {
+  id: number;
+  name: string;
+  sku: string;
+  basePrice: string;
+  stockQuantity: number;
+  lowStockThreshold: number;
+  variants: Variant[];
+};
 
 const ProductSchema = z.object({
   name: z.string().min(2),
   sku: z.string().min(3),
-  price: z.coerce.number().min(0.01),
-  stock: z.coerce.number().min(0),
+  basePrice: z.coerce.number().min(0.01),
+  stockQuantity: z.coerce.number().min(0),
+  lowStockThreshold: z.coerce.number().min(0),
   variants: z
     .array(
       z.object({
-        id: z.string().optional(),
+        id: z.number().optional(),
         name: z.string().min(1),
         sku: z.string().min(3),
         priceDelta: z.coerce.number().min(0),
-        stock: z.coerce.number().min(0),
+        stockQuantity: z.coerce.number().min(0),
         size: z.string().optional(),
         color: z.string().optional(),
       }),
@@ -46,17 +70,17 @@ const ProductSchema = z.object({
 type ProductFormValues = z.infer<typeof ProductSchema>;
 
 type VariantFormRow = {
-  id?: string;
+  id?: number;
   name: string;
   sku: string;
   priceDelta: number;
-  stock: number;
+  stockQuantity: number;
   size?: string;
   color?: string;
 };
 
-function StockBadge({ stock }: { stock: number }) {
-  if (stock <= 8) {
+function StockBadge({ stock, threshold }: { stock: number; threshold: number }) {
+  if (stock <= threshold) {
     return (
       <Badge
         className="border border-border bg-[hsl(var(--destructive)/0.14)] text-foreground"
@@ -66,7 +90,7 @@ function StockBadge({ stock }: { stock: number }) {
       </Badge>
     );
   }
-  if (stock <= 18) {
+  if (stock <= threshold * 2) {
     return (
       <Badge
         className="border border-border bg-[hsl(var(--chart-4)/0.12)] text-foreground"
@@ -87,19 +111,61 @@ function StockBadge({ stock }: { stock: number }) {
 }
 
 export default function ProductsPage() {
-  const { products, createProduct, updateProduct, deleteProduct } = useDemoData();
+  const { isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLocation("/login");
+    }
+  }, [isAuthenticated, setLocation]);
+
+  const { data: products = [], isLoading } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    enabled: isAuthenticated,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (body: unknown) => {
+      const res = await apiRequest("POST", "/api/products", body);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, body }: { id: number; body: unknown }) => {
+      const res = await apiRequest("PATCH", `/api/products/${id}`, body);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/products/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    },
+  });
 
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(ProductSchema),
     defaultValues: {
       name: "",
       sku: "",
-      price: 0,
-      stock: 0,
+      basePrice: 0,
+      stockQuantity: 0,
+      lowStockThreshold: 5,
       variants: [],
     },
   });
@@ -107,7 +173,7 @@ export default function ProductsPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return products;
-    return products.filter((p: Product) => {
+    return products.filter((p) => {
       return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
     });
   }, [products, query]);
@@ -121,8 +187,9 @@ export default function ProductsPage() {
         form.reset({
           name: "",
           sku: `SKU-${Math.floor(100 + Math.random() * 900)}`,
-          price: 99,
-          stock: 25,
+          basePrice: 99,
+          stockQuantity: 25,
+          lowStockThreshold: 5,
           variants: [],
         });
         setOpen(true);
@@ -131,22 +198,23 @@ export default function ProductsPage() {
     },
   ];
 
-  function openEdit(id: string) {
-    const p = products.find((x: Product) => x.id === id);
+  function openEdit(id: number) {
+    const p = products.find((x) => x.id === id);
     if (!p) return;
     setEditingId(id);
     form.reset({
       name: p.name,
       sku: p.sku,
-      price: p.price,
-      stock: p.stock,
+      basePrice: parseFloat(p.basePrice),
+      stockQuantity: p.stockQuantity,
+      lowStockThreshold: p.lowStockThreshold,
       variants:
         p.variants?.map((v) => ({
           id: v.id,
           name: v.name,
           sku: v.sku,
-          priceDelta: v.priceDelta,
-          stock: v.stock,
+          priceDelta: parseFloat(v.priceDelta),
+          stockQuantity: v.stockQuantity,
           size: v.options.size,
           color: v.options.color,
         })) ?? [],
@@ -160,11 +228,11 @@ export default function ProductsPage() {
     const normalized = variants
       .filter((v) => (v.name ?? "").trim().length > 0)
       .map((v) => ({
-        id: v.id ?? `var_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`,
+        ...(v.id != null ? { id: v.id } : {}),
         name: v.name,
         sku: v.sku,
-        priceDelta: Number(v.priceDelta ?? 0),
-        stock: Number(v.stock ?? 0),
+        priceDelta: String(v.priceDelta ?? 0),
+        stockQuantity: Number(v.stockQuantity ?? 0),
         options: {
           size: v.size?.trim() ? v.size.trim() : undefined,
           color: v.color?.trim() ? v.color.trim() : undefined,
@@ -174,19 +242,30 @@ export default function ProductsPage() {
     const payload = {
       name: values.name,
       sku: values.sku,
-      price: Number(values.price),
-      stock: Number(values.stock),
+      basePrice: String(values.basePrice),
+      stockQuantity: Number(values.stockQuantity),
+      lowStockThreshold: Number(values.lowStockThreshold),
       variants: normalized.length ? normalized : undefined,
     };
 
     if (editingId) {
-      updateProduct(editingId, payload);
+      updateMutation.mutate({ id: editingId, body: payload }, {
+        onSuccess: () => {
+          setOpen(false);
+          setEditingId(null);
+        },
+      });
     } else {
-      createProduct(payload);
+      createMutation.mutate(payload, {
+        onSuccess: () => {
+          setOpen(false);
+          setEditingId(null);
+        },
+      });
     }
-    setOpen(false);
-    setEditingId(null);
   }
+
+  if (!isAuthenticated) return null;
 
   return (
     <AppShell
@@ -227,58 +306,73 @@ export default function ProductsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((p: Product) => {
-                  const variantCount = p.variants?.length ?? 0;
-                  const variantStock = p.variants?.reduce((sum, v) => sum + v.stock, 0) ?? 0;
-                  const stock = variantCount ? variantStock : p.stock;
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      Loading products…
+                    </TableCell>
+                  </TableRow>
+                ) : filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      No products found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((p) => {
+                    const variantCount = p.variants?.length ?? 0;
+                    const variantStock = p.variants?.reduce((sum, v) => sum + v.stockQuantity, 0) ?? 0;
+                    const stock = variantCount ? variantStock : p.stockQuantity;
+                    const price = parseFloat(p.basePrice);
 
-                  return (
-                    <TableRow key={p.id} data-testid={`row-product-${p.id}`}>
-                      <TableCell className="title font-semibold" data-testid={`text-product-name-${p.id}`}>
-                        {p.name}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground" data-testid={`text-product-sku-${p.id}`}>
-                        {p.sku}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-product-price-${p.id}`}>
-                        {formatCurrency(p.price)}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-product-variant-count-${p.id}`}>
-                        {variantCount ? (
-                          <Badge className="border border-border bg-secondary/70 text-foreground">{variantCount}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-product-stock-${p.id}`}>
-                        {stock}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-product-health-${p.id}`}>
-                        <StockBadge stock={stock} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="secondary"
-                            className="h-9"
-                            onClick={() => openEdit(p.id)}
-                            data-testid={`button-edit-product-${p.id}`}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            className="h-9"
-                            onClick={() => deleteProduct(p.id)}
-                            data-testid={`button-delete-product-${p.id}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                    return (
+                      <TableRow key={p.id} data-testid={`row-product-${p.id}`}>
+                        <TableCell className="title font-semibold" data-testid={`text-product-name-${p.id}`}>
+                          {p.name}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground" data-testid={`text-product-sku-${p.id}`}>
+                          {p.sku}
+                        </TableCell>
+                        <TableCell className="text-right" data-testid={`text-product-price-${p.id}`}>
+                          {formatCurrency(price)}
+                        </TableCell>
+                        <TableCell className="text-right" data-testid={`text-product-variant-count-${p.id}`}>
+                          {variantCount ? (
+                            <Badge className="border border-border bg-secondary/70 text-foreground">{variantCount}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right" data-testid={`text-product-stock-${p.id}`}>
+                          {stock}
+                        </TableCell>
+                        <TableCell className="text-right" data-testid={`text-product-health-${p.id}`}>
+                          <StockBadge stock={stock} threshold={p.lowStockThreshold} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              className="h-9"
+                              onClick={() => openEdit(p.id)}
+                              data-testid={`button-edit-product-${p.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              className="h-9"
+                              onClick={() => deleteMutation.mutate(p.id)}
+                              data-testid={`button-delete-product-${p.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </div>
@@ -316,7 +410,7 @@ export default function ProductsPage() {
                           name: "",
                           sku: `SKU-${Math.floor(100 + Math.random() * 900)}-${Math.floor(10 + Math.random() * 90)}`,
                           priceDelta: 0,
-                          stock: 0,
+                          stockQuantity: 0,
                           size: "",
                           color: "",
                         },
@@ -442,10 +536,10 @@ export default function ProductsPage() {
                       <div>
                         <div className="text-xs text-muted-foreground" data-testid={`label-variant-stock-${idx}`}>Stock</div>
                         <Input
-                          value={String(v.stock ?? 0)}
+                          value={String(v.stockQuantity ?? 0)}
                           onChange={(e) => {
                             const next = [...((form.getValues("variants") ?? []) as VariantFormRow[])];
-                            next[idx] = { ...next[idx], stock: Number(e.target.value || 0) };
+                            next[idx] = { ...next[idx], stockQuantity: Number(e.target.value || 0) };
                             form.setValue("variants", next, { shouldDirty: true });
                           }}
                           className="mt-1 h-10"
@@ -486,39 +580,56 @@ export default function ProductsPage() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <Field>
-                <FieldLabel data-testid="label-product-price">Price</FieldLabel>
+                <FieldLabel data-testid="label-product-price">Base Price</FieldLabel>
                 <FieldContent>
                   <div className="relative">
                     <DollarSign className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                      {...form.register("price")}
+                      {...form.register("basePrice")}
                       className="h-10 pl-9"
                       inputMode="decimal"
                       data-testid="input-product-price"
                     />
                   </div>
-                  <FieldError errors={[form.formState.errors.price]} />
+                  <FieldError errors={[form.formState.errors.basePrice]} />
                 </FieldContent>
               </Field>
               <Field>
                 <FieldLabel data-testid="label-product-stock">Stock</FieldLabel>
                 <FieldContent>
                   <Input
-                    {...form.register("stock")}
+                    {...form.register("stockQuantity")}
                     className="h-10"
                     inputMode="numeric"
                     data-testid="input-product-stock"
                   />
-                  <FieldError errors={[form.formState.errors.stock]} />
+                  <FieldError errors={[form.formState.errors.stockQuantity]} />
                 </FieldContent>
               </Field>
             </div>
+
+            <Field>
+              <FieldLabel data-testid="label-product-low-stock-threshold">Low Stock Threshold</FieldLabel>
+              <FieldContent>
+                <Input
+                  {...form.register("lowStockThreshold")}
+                  className="h-10"
+                  inputMode="numeric"
+                  data-testid="input-product-low-stock-threshold"
+                />
+                <FieldError errors={[form.formState.errors.lowStockThreshold]} />
+              </FieldContent>
+            </Field>
 
             <div className="mt-2 flex items-center justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setOpen(false)} data-testid="button-cancel-product">
                 Cancel
               </Button>
-              <Button type="submit" data-testid="button-save-product">
+              <Button
+                type="submit"
+                disabled={createMutation.isPending || updateMutation.isPending}
+                data-testid="button-save-product"
+              >
                 {editingId ? "Save changes" : "Add product"}
               </Button>
             </div>
