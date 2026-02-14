@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Users,
   UserPlus,
+  UsersRound,
   Warehouse,
 } from "lucide-react";
 import { useState } from "react";
@@ -40,6 +41,7 @@ type NavSection = {
     label: string;
     icon: any;
     testId: string;
+    adminOnly?: boolean;
   }[];
 };
 
@@ -78,9 +80,10 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    title: "",
+    title: "Settings",
     items: [
-      { href: "/settings", label: "Settings", icon: Settings, testId: "link-nav-settings" },
+      { href: "/settings", label: "Preferences", icon: Settings, testId: "link-nav-settings" },
+      { href: "/settings/users", label: "User Management", icon: UsersRound, testId: "link-nav-users", adminOnly: true },
     ],
   },
 ];
@@ -152,27 +155,33 @@ export function AppShell({
           <Separator className="my-3" />
 
           <nav className="space-y-4" data-testid="nav-primary">
-            {navSections.map((section, si) => (
-              <div key={si}>
-                {section.title ? (
-                  <div className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70" data-testid={`text-nav-section-${section.title.toLowerCase()}`}>
-                    {section.title}
+            {navSections.map((section, si) => {
+              const visibleItems = section.items.filter(
+                (n) => !n.adminOnly || user?.role === "admin",
+              );
+              if (visibleItems.length === 0) return null;
+              return (
+                <div key={si}>
+                  {section.title ? (
+                    <div className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70" data-testid={`text-nav-section-${section.title.toLowerCase()}`}>
+                      {section.title}
+                    </div>
+                  ) : null}
+                  <div className="space-y-0.5">
+                    {visibleItems.map((n) => (
+                      <NavItem
+                        key={n.href}
+                        href={n.href}
+                        label={n.label}
+                        icon={n.icon}
+                        active={location === n.href}
+                        testId={n.testId}
+                      />
+                    ))}
                   </div>
-                ) : null}
-                <div className="space-y-0.5">
-                  {section.items.map((n) => (
-                    <NavItem
-                      key={n.href}
-                      href={n.href}
-                      label={n.label}
-                      icon={n.icon}
-                      active={location === n.href}
-                      testId={n.testId}
-                    />
-                  ))}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </nav>
 
           <Separator className="my-3" />

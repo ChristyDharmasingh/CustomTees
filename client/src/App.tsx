@@ -20,6 +20,7 @@ import AnalyticsProductsPage from "./pages/analytics-products";
 import AnalyticsRevenuePage from "./pages/analytics-revenue";
 import AnalyticsPurchasesPage from "./pages/analytics-purchases";
 import SettingsPage from "./pages/settings";
+import UserManagementPage from "./pages/user-management";
 
 function Router() {
   return (
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/analytics/revenue" component={AnalyticsRevenuePage} />
       <Route path="/analytics/purchases" component={AnalyticsPurchasesPage} />
       <Route path="/settings" component={SettingsPage} />
+      <Route path="/settings/users" component={UserManagementPage} />
       <Route component={NotFound} />
     </Switch>
   );

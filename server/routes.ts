@@ -77,6 +77,48 @@ export async function registerRoutes(
     return res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
   });
 
+  // ──── USERS (admin only) ────
+  app.get("/api/users", requireAuth, requireAdmin, async (_req, res) => {
+    const list = await storage.getUsers();
+    return res.json(list.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, createdAt: u.createdAt })));
+  });
+
+  app.post("/api/users", requireAuth, requireAdmin, async (req, res) => {
+    try {
+      const body = z
+        .object({
+          name: z.string().min(1),
+          email: z.string().email(),
+          password: z.string().min(6),
+          role: z.enum(["admin", "employee"]).default("employee"),
+        })
+        .parse(req.body);
+
+      const existing = await storage.getUserByEmail(body.email);
+      if (existing) return res.status(409).json({ message: "Email already registered" });
+
+      const passwordHash = await hashPassword(body.password);
+      const user = await storage.createUser({
+        name: body.name,
+        email: body.email,
+        passwordHash,
+        role: body.role,
+      });
+
+      return res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors });
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/users/:id", requireAuth, requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (id === req.userId) return res.status(400).json({ message: "Cannot delete your own account" });
+    await storage.deleteUser(id);
+    return res.json({ success: true });
+  });
+
   // ──── CUSTOMERS ────
   app.get("/api/customers", requireAuth, async (_req, res) => {
     const list = await storage.getCustomers();
