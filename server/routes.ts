@@ -55,9 +55,11 @@ export async function registerRoutes(
         .parse(req.body);
 
       const user = await storage.getUserByEmail(body.email);
+      console.log("[login] email:", body.email, "found:", !!user);
       if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
       const valid = await comparePassword(body.password, user.passwordHash);
+      console.log("[login] password valid:", valid, "hash length:", user.passwordHash?.length);
       if (!valid) return res.status(401).json({ message: "Invalid credentials" });
 
       const token = generateToken(user.id, user.role);
