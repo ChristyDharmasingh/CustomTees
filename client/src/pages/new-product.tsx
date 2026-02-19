@@ -26,11 +26,11 @@ import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 
 const CATEGORY_OPTIONS = [
-  "Apparel",
-  "Drinkware",
-  "Accessories",
-  "Stationery",
-  "Packaging",
+  "Can Coolers",
+  "Hats",
+  "Bags",
+  "Fitty Shirts",
+  "T-Shirts",
 ];
 
 const COLOR_OPTIONS = [
