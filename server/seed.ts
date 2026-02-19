@@ -9,7 +9,7 @@ import {
   orderItems,
   purchases,
 } from "@shared/schema";
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 async function seed() {
   console.log("Seeding database...");
@@ -44,34 +44,39 @@ async function seed() {
   const [pCanCooler, pCap, pTshirt, pCup, pScanner, pLabels, pScale, pPaper, pTape] = await db
     .insert(products)
     .values([
-      { name: "Can Cooler", sku: "SKU-CC-001", basePrice: "14.00", stockQuantity: 120, lowStockThreshold: 15 },
-      { name: "Cap", sku: "SKU-CP-010", basePrice: "24.00", stockQuantity: 68, lowStockThreshold: 10 },
-      { name: "T-Shirts", sku: "SKU-TS-100", basePrice: "32.00", stockQuantity: 94, lowStockThreshold: 20 },
-      { name: "Cup", sku: "SKU-CUP-020", basePrice: "18.00", stockQuantity: 44, lowStockThreshold: 10 },
-      { name: "Wireless Barcode Scanner", sku: "SKU-204", basePrice: "129.00", stockQuantity: 22, lowStockThreshold: 5 },
-      { name: "Thermal Label Roll (4x6)", sku: "SKU-118", basePrice: "39.00", stockQuantity: 8, lowStockThreshold: 10 },
-      { name: "Shipping Scale (Digital)", sku: "SKU-330", basePrice: "89.00", stockQuantity: 14, lowStockThreshold: 5 },
-      { name: "Packing Paper (Kraft)", sku: "SKU-071", basePrice: "24.00", stockQuantity: 40, lowStockThreshold: 10 },
-      { name: "Reinforced Packing Tape", sku: "SKU-055", basePrice: "12.00", stockQuantity: 6, lowStockThreshold: 8 },
+      { name: "Can Cooler", baseSku: "SKU-CC-001", category: "Apparel", hasColorVariation: true, hasSizeVariation: false },
+      { name: "Cap", baseSku: "SKU-CP-010", category: "Apparel", hasColorVariation: true, hasSizeVariation: false },
+      { name: "T-Shirts", baseSku: "SKU-TS-100", category: "Apparel", hasColorVariation: true, hasSizeVariation: true },
+      { name: "Cup", baseSku: "SKU-CUP-020", category: "Drinkware", hasColorVariation: true, hasSizeVariation: true },
+      { name: "Wireless Barcode Scanner", baseSku: "SKU-204", category: "Accessories", hasColorVariation: false, hasSizeVariation: false },
+      { name: "Thermal Label Roll (4x6)", baseSku: "SKU-118", category: "Accessories", hasColorVariation: false, hasSizeVariation: false },
+      { name: "Shipping Scale (Digital)", baseSku: "SKU-330", category: "Accessories", hasColorVariation: false, hasSizeVariation: false },
+      { name: "Packing Paper (Kraft)", baseSku: "SKU-071", category: "Accessories", hasColorVariation: false, hasSizeVariation: false },
+      { name: "Reinforced Packing Tape", baseSku: "SKU-055", category: "Accessories", hasColorVariation: false, hasSizeVariation: false },
     ])
     .returning();
 
   await db.insert(productVariants).values([
-    { productId: pCanCooler.id, name: "Black", sku: "SKU-CC-001-BLK", priceDelta: "0", stockQuantity: 52, options: { color: "Black" } },
-    { productId: pCanCooler.id, name: "Sand", sku: "SKU-CC-001-SND", priceDelta: "0", stockQuantity: 38, options: { color: "Sand" } },
-    { productId: pCanCooler.id, name: "Ocean", sku: "SKU-CC-001-OCN", priceDelta: "1.00", stockQuantity: 30, options: { color: "Ocean" } },
-    { productId: pCap.id, name: "Navy", sku: "SKU-CP-010-NVY", priceDelta: "0", stockQuantity: 22, options: { color: "Navy" } },
-    { productId: pCap.id, name: "Black", sku: "SKU-CP-010-BLK", priceDelta: "0", stockQuantity: 28, options: { color: "Black" } },
-    { productId: pCap.id, name: "Cream", sku: "SKU-CP-010-CRM", priceDelta: "0", stockQuantity: 18, options: { color: "Cream" } },
-    { productId: pTshirt.id, name: "S / Black", sku: "SKU-TS-100-S-BLK", priceDelta: "0", stockQuantity: 14, options: { size: "S", color: "Black" } },
-    { productId: pTshirt.id, name: "M / Black", sku: "SKU-TS-100-M-BLK", priceDelta: "0", stockQuantity: 18, options: { size: "M", color: "Black" } },
-    { productId: pTshirt.id, name: "L / Black", sku: "SKU-TS-100-L-BLK", priceDelta: "0", stockQuantity: 12, options: { size: "L", color: "Black" } },
-    { productId: pTshirt.id, name: "M / Sand", sku: "SKU-TS-100-M-SND", priceDelta: "0", stockQuantity: 16, options: { size: "M", color: "Sand" } },
-    { productId: pTshirt.id, name: "L / Sand", sku: "SKU-TS-100-L-SND", priceDelta: "0", stockQuantity: 14, options: { size: "L", color: "Sand" } },
-    { productId: pTshirt.id, name: "XL / Ocean", sku: "SKU-TS-100-XL-OCN", priceDelta: "2.00", stockQuantity: 20, options: { size: "XL", color: "Ocean" } },
-    { productId: pCup.id, name: "12oz / Black", sku: "SKU-CUP-020-12-BLK", priceDelta: "0", stockQuantity: 12, options: { size: "12oz", color: "Black" } },
-    { productId: pCup.id, name: "12oz / Sand", sku: "SKU-CUP-020-12-SND", priceDelta: "0", stockQuantity: 10, options: { size: "12oz", color: "Sand" } },
-    { productId: pCup.id, name: "16oz / Ocean", sku: "SKU-CUP-020-16-OCN", priceDelta: "2.00", stockQuantity: 22, options: { size: "16oz", color: "Ocean" } },
+    { productId: pCanCooler.id, color: "Black", sku: "SKU-CC-001-BLK", stockQuantity: 52, lowStockThreshold: 15, price: "14.00" },
+    { productId: pCanCooler.id, color: "Sand", sku: "SKU-CC-001-SND", stockQuantity: 38, lowStockThreshold: 15, price: "14.00" },
+    { productId: pCanCooler.id, color: "Ocean", sku: "SKU-CC-001-OCN", stockQuantity: 30, lowStockThreshold: 15, price: "15.00" },
+    { productId: pCap.id, color: "Navy", sku: "SKU-CP-010-NVY", stockQuantity: 22, lowStockThreshold: 10, price: "24.00" },
+    { productId: pCap.id, color: "Black", sku: "SKU-CP-010-BLK", stockQuantity: 28, lowStockThreshold: 10, price: "24.00" },
+    { productId: pCap.id, color: "Cream", sku: "SKU-CP-010-CRM", stockQuantity: 18, lowStockThreshold: 10, price: "24.00" },
+    { productId: pTshirt.id, size: "S", color: "Black", sku: "SKU-TS-100-S-BLK", stockQuantity: 14, lowStockThreshold: 20, price: "32.00" },
+    { productId: pTshirt.id, size: "M", color: "Black", sku: "SKU-TS-100-M-BLK", stockQuantity: 18, lowStockThreshold: 20, price: "32.00" },
+    { productId: pTshirt.id, size: "L", color: "Black", sku: "SKU-TS-100-L-BLK", stockQuantity: 12, lowStockThreshold: 20, price: "32.00" },
+    { productId: pTshirt.id, size: "M", color: "Sand", sku: "SKU-TS-100-M-SND", stockQuantity: 16, lowStockThreshold: 20, price: "32.00" },
+    { productId: pTshirt.id, size: "L", color: "Sand", sku: "SKU-TS-100-L-SND", stockQuantity: 14, lowStockThreshold: 20, price: "32.00" },
+    { productId: pTshirt.id, size: "XL", color: "Ocean", sku: "SKU-TS-100-XL-OCN", stockQuantity: 20, lowStockThreshold: 20, price: "34.00" },
+    { productId: pCup.id, size: "12oz", color: "Black", sku: "SKU-CUP-020-12-BLK", stockQuantity: 12, lowStockThreshold: 10, price: "18.00" },
+    { productId: pCup.id, size: "12oz", color: "Sand", sku: "SKU-CUP-020-12-SND", stockQuantity: 10, lowStockThreshold: 10, price: "18.00" },
+    { productId: pCup.id, size: "16oz", color: "Ocean", sku: "SKU-CUP-020-16-OCN", stockQuantity: 22, lowStockThreshold: 10, price: "20.00" },
+    { productId: pScanner.id, sku: "SKU-204-STD", stockQuantity: 22, lowStockThreshold: 5, price: "129.00" },
+    { productId: pLabels.id, sku: "SKU-118-STD", stockQuantity: 8, lowStockThreshold: 10, price: "39.00" },
+    { productId: pScale.id, sku: "SKU-330-STD", stockQuantity: 14, lowStockThreshold: 5, price: "89.00" },
+    { productId: pPaper.id, sku: "SKU-071-STD", stockQuantity: 40, lowStockThreshold: 10, price: "24.00" },
+    { productId: pTape.id, sku: "SKU-055-STD", stockQuantity: 6, lowStockThreshold: 8, price: "12.00" },
   ]);
 
   const allCustomers = [c1, c2, c3, c4, c5];
@@ -92,7 +97,12 @@ async function seed() {
     for (let j = 0; j < lineCount; j++) {
       const product = allProducts[Math.floor(Math.random() * allProducts.length)];
       const qty = 1 + Math.floor(Math.random() * 5);
-      const price = parseFloat(product.basePrice);
+      const [productVariant] = await db
+        .select()
+        .from(productVariants)
+        .where(eq(productVariants.productId, product.id))
+        .limit(1);
+      const price = parseFloat(productVariant?.price ?? "0");
       totalAmount += price * qty;
       items.push({ productId: product.id, quantity: qty, price });
     }
@@ -122,7 +132,12 @@ async function seed() {
   for (let i = 0; i < 8; i++) {
     const product = allProducts[Math.floor(Math.random() * allProducts.length)];
     const qty = 10 + Math.floor(Math.random() * 50);
-    const cost = parseFloat(product.basePrice) * 0.6 * qty;
+    const [productVariant] = await db
+      .select()
+      .from(productVariants)
+      .where(eq(productVariants.productId, product.id))
+      .limit(1);
+    const cost = parseFloat(productVariant?.price ?? "0") * 0.6 * qty;
     const purchasedAt = new Date();
     purchasedAt.setDate(purchasedAt.getDate() - Math.floor(1 + Math.random() * 60));
     await db.insert(purchases).values({
