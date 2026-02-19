@@ -1,4 +1,4 @@
-import { eq, desc, sql, and, lte, gte, asc } from "drizzle-orm";
+import { eq, desc, sql, asc } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -154,10 +154,12 @@ export class DatabaseStorage implements IStorage {
 
   async getLowStockProducts(): Promise<Product[]> {
     return db
-      .select()
+      .selectDistinct({ product: products })
       .from(products)
-      .where(sql`${products.stockQuantity} <= ${products.lowStockThreshold}`)
-      .orderBy(asc(products.stockQuantity));
+      .innerJoin(productVariants, eq(productVariants.productId, products.id))
+      .where(sql`${productVariants.stockQuantity} <= ${productVariants.lowStockThreshold}`)
+      .orderBy(desc(products.createdAt))
+      .then((rows) => rows.map((row) => row.product));
   }
 
   async getVariantsByProduct(productId: number): Promise<ProductVariant[]> {
@@ -251,7 +253,8 @@ export class DatabaseStorage implements IStorage {
         quantity: orderItems.quantity,
         priceAtTime: orderItems.priceAtTime,
         productName: products.name,
-        variantName: productVariants.name,
+        variantColor: productVariants.color,
+        variantSize: productVariants.size,
       })
       .from(orderItems)
       .leftJoin(products, eq(orderItems.productId, products.id))
@@ -260,7 +263,7 @@ export class DatabaseStorage implements IStorage {
     return rows.map((r) => ({
       ...r,
       productName: r.productName ?? "Unknown",
-      variantName: r.variantName ?? undefined,
+      variantName: [r.variantSize, r.variantColor].filter(Boolean).join(" / ") || undefined,
     }));
   }
 
@@ -291,27 +294,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deductStock(productId: number, variantId: number | null, quantity: number): Promise<void> {
-    await db
-      .update(products)
-      .set({ stockQuantity: sql`${products.stockQuantity} - ${quantity}` })
-      .where(eq(products.id, productId));
-
-    if (variantId) {
-      await db
-        .update(productVariants)
-        .set({ stockQuantity: sql`${productVariants.stockQuantity} - ${quantity}` })
-        .where(eq(productVariants.id, variantId));
+    let targetVariantId = variantId;
+    if (!targetVariantId) {
+      const [firstVariant] = await db
+        .select({ id: productVariants.id })
+        .from(productVariants)
+        .where(eq(productVariants.productId, productId))
+        .orderBy(asc(productVariants.id))
+        .limit(1);
+      targetVariantId = firstVariant?.id ?? null;
     }
+
+    if (!targetVariantId) return;
+
+    await db
+      .update(productVariants)
+      .set({ stockQuantity: sql`${productVariants.stockQuantity} - ${quantity}` })
+      .where(eq(productVariants.id, targetVariantId));
   }
 
   async addStock(productId: number, quantity: number): Promise<void> {
+    const [firstVariant] = await db
+      .select({ id: productVariants.id })
+      .from(productVariants)
+      .where(eq(productVariants.productId, productId))
+      .orderBy(asc(productVariants.id))
+      .limit(1);
+    if (!firstVariant) return;
+
     await db
-      .update(products)
-      .set({
-        stockQuantity: sql`${products.stockQuantity} + ${quantity}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(products.id, productId));
+      .update(productVariants)
+      .set({ stockQuantity: sql`${productVariants.stockQuantity} + ${quantity}` })
+      .where(eq(productVariants.id, firstVariant.id));
   }
 
   async getAnalyticsSalesOverview() {
