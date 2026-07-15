@@ -182,18 +182,7 @@ export default function ProductsPage() {
     {
       label: "Add product",
       icon: <PackagePlus className="h-4 w-4" />,
-      onClick: () => {
-        setEditingId(null);
-        form.reset({
-          name: "",
-          sku: `SKU-${Math.floor(100 + Math.random() * 900)}`,
-          basePrice: 99,
-          stockQuantity: 25,
-          lowStockThreshold: 5,
-          variants: [],
-        });
-        setOpen(true);
-      },
+      onClick: () => setLocation("/products/new"),
       testId: "button-add-product",
     },
   ];

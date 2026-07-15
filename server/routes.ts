@@ -1,7 +1,10 @@
 import type { Express } from "express";
 import { type Server } from "http";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { storage } from "./storage";
+import { db } from "./db";
+import { products, productVariants } from "@shared/schema";
 import {
   hashPassword,
   comparePassword,
@@ -9,6 +12,78 @@ import {
   requireAuth,
   requireAdmin,
 } from "./auth";
+
+const variantPayloadSchema = z.object({
+  color: z.string().trim().min(1).optional().nullable(),
+  size: z.string().trim().min(1).optional().nullable(),
+  sku: z.string().trim().min(1),
+  stockQuantity: z.coerce.number().int().min(0),
+  lowStockThreshold: z.coerce.number().int().min(0),
+  price: z
+    .union([z.coerce.number().min(0), z.literal(""), z.null()])
+    .optional()
+    .transform((value) => {
+      if (value === "" || value == null) return undefined;
+      return value;
+    }),
+});
+
+const createProductPayloadSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    baseSku: z.string().trim().min(1),
+    category: z.string().trim().min(1),
+    hasColorVariation: z.coerce.boolean().default(false),
+    hasSizeVariation: z.coerce.boolean().default(false),
+    variants: z.array(variantPayloadSchema).min(1),
+  })
+  .superRefine((data, ctx) => {
+    data.variants.forEach((variant, index) => {
+      if (data.hasColorVariation && !variant.color) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Color is required when color variation is enabled",
+          path: ["variants", index, "color"],
+        });
+      }
+      if (data.hasSizeVariation && !variant.size) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Size is required when size variation is enabled",
+          path: ["variants", index, "size"],
+        });
+      }
+    });
+  });
+
+function toLegacyCompatibleVariant(variant: any) {
+  return {
+    ...variant,
+    name: [variant.size, variant.color].filter(Boolean).join(" / ") || variant.sku,
+    priceDelta: "0",
+    options: {
+      size: variant.size ?? undefined,
+      color: variant.color ?? undefined,
+    },
+  };
+}
+
+function toLegacyCompatibleProduct(product: any, variants: any[]) {
+  const totalStock = variants.reduce((sum, item) => sum + (item.stockQuantity ?? 0), 0);
+  const minThreshold = variants.length
+    ? Math.min(...variants.map((item) => item.lowStockThreshold ?? 0))
+    : 0;
+  const firstPriced = variants.find((item) => item.price != null);
+
+  return {
+    ...product,
+    sku: product.baseSku,
+    basePrice: firstPriced?.price ?? "0",
+    stockQuantity: totalStock,
+    lowStockThreshold: minThreshold,
+    variants: variants.map(toLegacyCompatibleVariant),
+  };
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -170,65 +245,62 @@ export async function registerRoutes(
     const list = await storage.getProducts();
     const withVariants = await Promise.all(
       list.map(async (p) => ({
-        ...p,
+        product: p,
         variants: await storage.getVariantsByProduct(p.id),
       })),
     );
-    return res.json(withVariants);
+    return res.json(
+      withVariants.map(({ product, variants }) =>
+        toLegacyCompatibleProduct(product, variants),
+      ),
+    );
   });
 
   app.get("/api/products/:id", requireAuth, async (req, res) => {
     const p = await storage.getProduct(Number(req.params.id));
     if (!p) return res.status(404).json({ message: "Product not found" });
     const variants = await storage.getVariantsByProduct(p.id);
-    return res.json({ ...p, variants });
+    return res.json(toLegacyCompatibleProduct(p, variants));
   });
 
   app.post("/api/products", requireAuth, async (req, res) => {
     try {
-      const body = z
-        .object({
-          name: z.string().min(1),
-          sku: z.string().min(1),
-          basePrice: z.coerce.number().min(0),
-          stockQuantity: z.coerce.number().min(0).default(0),
-          lowStockThreshold: z.coerce.number().min(0).default(10),
-          variants: z
-            .array(
-              z.object({
-                name: z.string().min(1),
-                sku: z.string().min(1),
-                priceDelta: z.coerce.number().default(0),
-                stockQuantity: z.coerce.number().min(0).default(0),
-                options: z
-                  .object({ size: z.string().optional(), color: z.string().optional() })
-                  .default({}),
-              }),
-            )
-            .optional()
-            .default([]),
-        })
-        .parse(req.body);
+      const body = createProductPayloadSchema.parse(req.body);
 
-      const { variants, ...productData } = body;
-      const product = await storage.createProduct({
-        ...productData,
-        basePrice: String(productData.basePrice),
+      const created = await db.transaction(async (tx) => {
+        const [product] = await tx
+          .insert(products)
+          .values({
+            name: body.name,
+            baseSku: body.baseSku,
+            category: body.category,
+            hasColorVariation: body.hasColorVariation,
+            hasSizeVariation: body.hasSizeVariation,
+          })
+          .returning();
+
+        const variants = await tx
+          .insert(productVariants)
+          .values(
+            body.variants.map((variant) => ({
+              productId: product.id,
+              color: variant.color ?? null,
+              size: variant.size ?? null,
+              sku: variant.sku,
+              stockQuantity: variant.stockQuantity,
+              lowStockThreshold: variant.lowStockThreshold,
+              price:
+                variant.price == null ? null : String(variant.price),
+            })),
+          )
+          .returning();
+
+        return { product, variants };
       });
 
-      for (const v of variants) {
-        await storage.createVariant({
-          productId: product.id,
-          name: v.name,
-          sku: v.sku,
-          priceDelta: String(v.priceDelta),
-          stockQuantity: v.stockQuantity,
-          options: v.options,
-        });
-      }
-
-      const finalVariants = await storage.getVariantsByProduct(product.id);
-      return res.status(201).json({ ...product, variants: finalVariants });
+      return res.status(201).json(
+        toLegacyCompatibleProduct(created.product, created.variants),
+      );
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors });
       return res.status(500).json({ message: err.message });
@@ -240,51 +312,91 @@ export async function registerRoutes(
       const id = Number(req.params.id);
       const body = z
         .object({
-          name: z.string().min(1).optional(),
-          sku: z.string().min(1).optional(),
-          basePrice: z.coerce.number().min(0).optional(),
-          stockQuantity: z.coerce.number().min(0).optional(),
-          lowStockThreshold: z.coerce.number().min(0).optional(),
-          variants: z
-            .array(
-              z.object({
-                id: z.number().optional(),
-                name: z.string().min(1),
-                sku: z.string().min(1),
-                priceDelta: z.coerce.number().default(0),
-                stockQuantity: z.coerce.number().min(0).default(0),
-                options: z
-                  .object({ size: z.string().optional(), color: z.string().optional() })
-                  .default({}),
-              }),
-            )
-            .optional(),
+          name: z.string().trim().min(1).optional(),
+          baseSku: z.string().trim().min(1).optional(),
+          category: z.string().trim().min(1).optional(),
+          hasColorVariation: z.coerce.boolean().optional(),
+          hasSizeVariation: z.coerce.boolean().optional(),
+          variants: z.array(variantPayloadSchema).min(1).optional(),
         })
         .parse(req.body);
 
-      const { variants, basePrice, ...rest } = body;
-      const updateData: any = { ...rest };
-      if (basePrice !== undefined) updateData.basePrice = String(basePrice);
+      const updated = await db.transaction(async (tx) => {
+        const [existing] = await tx
+          .select()
+          .from(products)
+          .where(eq(products.id, id));
+        if (!existing) return null;
 
-      const product = await storage.updateProduct(id, updateData);
-      if (!product) return res.status(404).json({ message: "Product not found" });
+        const hasColorVariation =
+          body.hasColorVariation ?? existing.hasColorVariation;
+        const hasSizeVariation = body.hasSizeVariation ?? existing.hasSizeVariation;
 
-      if (variants !== undefined) {
-        await storage.deleteVariantsByProduct(id);
-        for (const v of variants) {
-          await storage.createVariant({
-            productId: id,
-            name: v.name,
-            sku: v.sku,
-            priceDelta: String(v.priceDelta),
-            stockQuantity: v.stockQuantity,
-            options: v.options,
+        if (body.variants) {
+          body.variants.forEach((variant, index) => {
+            if (hasColorVariation && !variant.color) {
+              throw new z.ZodError([
+                {
+                  code: z.ZodIssueCode.custom,
+                  path: ["variants", index, "color"],
+                  message: "Color is required when color variation is enabled",
+                },
+              ]);
+            }
+            if (hasSizeVariation && !variant.size) {
+              throw new z.ZodError([
+                {
+                  code: z.ZodIssueCode.custom,
+                  path: ["variants", index, "size"],
+                  message: "Size is required when size variation is enabled",
+                },
+              ]);
+            }
           });
         }
-      }
 
-      const finalVariants = await storage.getVariantsByProduct(id);
-      return res.json({ ...product, variants: finalVariants });
+        const [product] = await tx
+          .update(products)
+          .set({
+            ...(body.name !== undefined ? { name: body.name } : {}),
+            ...(body.baseSku !== undefined ? { baseSku: body.baseSku } : {}),
+            ...(body.category !== undefined ? { category: body.category } : {}),
+            ...(body.hasColorVariation !== undefined
+              ? { hasColorVariation: body.hasColorVariation }
+              : {}),
+            ...(body.hasSizeVariation !== undefined
+              ? { hasSizeVariation: body.hasSizeVariation }
+              : {}),
+            updatedAt: new Date(),
+          })
+          .where(eq(products.id, id))
+          .returning();
+
+        if (body.variants) {
+          await tx.delete(productVariants).where(eq(productVariants.productId, id));
+          await tx.insert(productVariants).values(
+            body.variants.map((variant) => ({
+              productId: id,
+              color: variant.color ?? null,
+              size: variant.size ?? null,
+              sku: variant.sku,
+              stockQuantity: variant.stockQuantity,
+              lowStockThreshold: variant.lowStockThreshold,
+              price:
+                variant.price == null ? null : String(variant.price),
+            })),
+          );
+        }
+
+        const variants = await tx
+          .select()
+          .from(productVariants)
+          .where(eq(productVariants.productId, id));
+        return { product, variants };
+      });
+
+      if (!updated) return res.status(404).json({ message: "Product not found" });
+      return res.json(toLegacyCompatibleProduct(updated.product, updated.variants));
     } catch (err: any) {
       if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors });
       return res.status(500).json({ message: err.message });
@@ -298,7 +410,17 @@ export async function registerRoutes(
 
   app.get("/api/products/alerts/low-stock", requireAuth, async (_req, res) => {
     const list = await storage.getLowStockProducts();
-    return res.json(list);
+    const withVariants = await Promise.all(
+      list.map(async (product) => ({
+        product,
+        variants: await storage.getVariantsByProduct(product.id),
+      })),
+    );
+    return res.json(
+      withVariants.map(({ product, variants }) =>
+        toLegacyCompatibleProduct(product, variants),
+      ),
+    );
   });
 
   // ──── ORDERS ────
@@ -342,11 +464,23 @@ export async function registerRoutes(
         const product = await storage.getProduct(item.productId);
         if (!product) return res.status(400).json({ message: `Product ${item.productId} not found` });
 
-        let price = parseFloat(product.basePrice);
+        let price = 0;
         if (item.variantId) {
           const variants = await storage.getVariantsByProduct(item.productId);
           const variant = variants.find((v) => v.id === item.variantId);
-          if (variant) price += parseFloat(variant.priceDelta);
+          if (variant?.price != null) {
+            price = parseFloat(String(variant.price));
+          }
+        } else {
+          const variants = await storage.getVariantsByProduct(item.productId);
+          if (variants.length === 1) {
+            item.variantId = variants[0].id;
+            if (variants[0].price != null) {
+              price = parseFloat(String(variants[0].price));
+            }
+          } else {
+            return res.status(400).json({ message: "Variant selection is required for this product" });
+          }
         }
 
         totalAmount += price * item.quantity;

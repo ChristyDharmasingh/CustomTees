@@ -2,12 +2,11 @@ import { sql } from "drizzle-orm";
 import {
   pgTable,
   text,
-  varchar,
+  boolean,
   integer,
   numeric,
   timestamp,
   serial,
-  jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -33,10 +32,10 @@ export const customers = pgTable("customers", {
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  sku: text("sku").notNull().unique(),
-  basePrice: numeric("base_price", { precision: 10, scale: 2 }).notNull(),
-  stockQuantity: integer("stock_quantity").notNull().default(0),
-  lowStockThreshold: integer("low_stock_threshold").notNull().default(10),
+  baseSku: text("base_sku").notNull().unique(),
+  category: text("category").notNull(),
+  hasColorVariation: boolean("has_color_variation").notNull().default(false),
+  hasSizeVariation: boolean("has_size_variation").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -46,13 +45,12 @@ export const productVariants = pgTable("product_variants", {
   productId: integer("product_id")
     .notNull()
     .references(() => products.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
+  color: text("color"),
+  size: text("size"),
   sku: text("sku").notNull().unique(),
-  priceDelta: numeric("price_delta", { precision: 10, scale: 2 })
-    .notNull()
-    .default("0"),
   stockQuantity: integer("stock_quantity").notNull().default(0),
-  options: jsonb("options").$type<{ size?: string; color?: string }>().default({}),
+  lowStockThreshold: integer("low_stock_threshold").notNull().default(0),
+  price: numeric("price", { precision: 10, scale: 2 }),
 });
 
 export const orders = pgTable("orders", {
