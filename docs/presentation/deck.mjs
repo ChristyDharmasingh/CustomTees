@@ -51,7 +51,7 @@ function iconRow(s, x, y, color, icon, text, w) {
   s.addText("CustomTees OMS", { x: 1.0, y: 2.35, w: 11.33, h: 1.0, align: "center", fontSize: 48, bold: true, color: WHITE, fontFace: F, margin: 0 });
   s.addText("From Replit prototype to production on Google Cloud", { x: 1.0, y: 3.45, w: 11.33, h: 0.55, align: "center", fontSize: 20, italic: true, color: MINT, fontFace: F, margin: 0 });
   s.addText("Customer Order Management System   ·   Leadership Demo   ·   July 2026", { x: 1.0, y: 4.35, w: 11.33, h: 0.4, align: "center", fontSize: 13, color: "B9CCDD", fontFace: F, margin: 0 });
-  s.addText("Christy Jason", { x: 1.0, y: 6.55, w: 11.33, h: 0.4, align: "center", fontSize: 13, bold: true, color: WHITE, fontFace: F, margin: 0 });
+  s.addText("Christy", { x: 1.0, y: 6.55, w: 11.33, h: 0.4, align: "center", fontSize: 13, bold: true, color: WHITE, fontFace: F, margin: 0 });
   s.addNotes("Welcome. Today I'll show you CustomTees, our customer order management system — what it does, how it's built, and how it went from a rapid prototype to a production deployment on Google Cloud.");
 }
 
