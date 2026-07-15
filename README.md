@@ -24,6 +24,17 @@ Deployment Target
 - Google Cloud Run
 
 ---
+* client/ → frontend (probably React + Vite)
+* server/ → backend (Node API)
+* shared/ → shared types or utilities
+* attached_assets/ → uploaded/static files
+* drizzle.config.ts → database ORM config
+* vite.config.ts → frontend bundler config
+
+So this looks like a monorepo style full-stack app.
+
+----
+Understanding Your Structure (High Level)
 
 # Step 1 - Export Project from Replit
 
